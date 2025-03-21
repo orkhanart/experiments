@@ -1,0 +1,130 @@
+import { CONFIG } from './config.js';
+import { PointManager } from './points.js';
+import { ObjectDetector } from './objectDetection.js';
+import { ImageEffects } from './imageEffects.js';
+
+export class App {
+  constructor() {
+    this.img = null;
+    this.video = null;
+    this.useVideo = false;
+    this.isAnimating = false;
+    this.noiseOffset = 0;
+    this.mouseInteraction = false;
+
+    this.pointManager = new PointManager();
+    this.objectDetector = new ObjectDetector();
+    this.imageEffects = new ImageEffects();
+  }
+
+  preload() {
+    this.img = loadImage('https://picsum.photos/800');
+  }
+
+  async setup() {
+    // Get container dimensions
+    const container = document.getElementById('canvas-container');
+    const containerWidth = container.clientWidth - CONFIG.canvas.padding * 2;
+    const containerHeight = container.clientHeight - CONFIG.canvas.padding * 2;
+    
+    // Calculate canvas size based on container and max dimensions
+    CONFIG.canvas.width = min(containerWidth, CONFIG.canvas.maxWidth);
+    CONFIG.canvas.height = min(containerHeight, CONFIG.canvas.maxHeight);
+    
+    const canvas = createCanvas(CONFIG.canvas.width, CONFIG.canvas.height);
+    canvas.parent('canvas-container');
+    imageMode(CENTER);
+    
+    this.video = createCapture(VIDEO);
+    this.video.size(width, height);
+    this.video.hide();
+    
+    this.pointManager.generatePoints(this.img, width, height);
+    frameRate(30);
+    
+    // Handle window resize
+    window.addEventListener('resize', () => this.windowResized());
+    
+    // Initialize object detector
+    await this.objectDetector.init();
+  }
+
+  windowResized() {
+    // Update canvas size based on container
+    const container = document.getElementById('canvas-container');
+    const containerWidth = container.clientWidth - CONFIG.canvas.padding * 2;
+    const containerHeight = container.clientHeight - CONFIG.canvas.padding * 2;
+    
+    CONFIG.canvas.width = min(containerWidth, CONFIG.canvas.maxWidth);
+    CONFIG.canvas.height = min(containerHeight, CONFIG.canvas.maxHeight);
+    
+    resizeCanvas(CONFIG.canvas.width, CONFIG.canvas.height);
+    this.pointManager.generatePoints(this.useVideo ? this.video : this.img, width, height);
+  }
+
+  draw() {
+    background(0);
+    
+    // Update points if animating
+    if (this.isAnimating) {
+      this.noiseOffset += CONFIG.animation.noiseSpeed;
+      this.pointManager.updatePoints(
+        this.noiseOffset,
+        this.mouseInteraction,
+        mouseX,
+        mouseY,
+        mouseIsPressed
+      );
+    }
+    
+    // Draw main content
+    push();
+    translate(width/2, height/2);
+    
+    let source = this.useVideo ? this.video : this.img;
+    this.imageEffects.apply(source);
+    image(source, 0, 0, width, height);
+    
+    this.pointManager.drawConnections();
+    
+    // Draw detection boxes if active
+    if (this.objectDetector.isDetecting) {
+      this.objectDetector.detect(source);
+      this.objectDetector.drawBoxes();
+    }
+    
+    pop();
+  }
+
+  // UI Control Methods
+  toggleAnimation() {
+    this.isAnimating = !this.isAnimating;
+  }
+
+  toggleMouseInteraction() {
+    this.mouseInteraction = !this.mouseInteraction;
+  }
+
+  toggleInputSource() {
+    this.useVideo = !this.useVideo;
+    if (this.useVideo) {
+      this.video.play();
+    } else {
+      this.video.stop();
+    }
+    this.pointManager.generatePoints(this.useVideo ? this.video : this.img, width, height);
+  }
+
+  handleDrop(event) {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    
+    if (file.type.match('image.*')) {
+      this.img = loadImage(URL.createObjectURL(file), () => {
+        this.useVideo = false;
+        this.video.stop();
+        this.pointManager.generatePoints(this.img, width, height);
+      });
+    }
+  }
+}

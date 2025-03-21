@@ -1,0 +1,133 @@
+import { CONFIG } from './config.js';
+
+export class ObjectDetector {
+  constructor() {
+    this.detector = null;
+    this.detectedObjects = [];
+    this.isDetecting = false;
+    this.detectionCanvas = null;
+    this.detectionCtx = null;
+  }
+
+  async init() {
+    this.updateStatus('Loading model...');
+    try {
+      if (typeof cocoSsd === 'undefined') {
+        throw new Error('COCO-SSD model not loaded');
+      }
+      console.log('Loading COCO-SSD model...');
+      this.detector = await cocoSsd.load();
+      console.log('Model loaded successfully');
+      
+      // Create detection canvas
+      this.detectionCanvas = document.createElement('canvas');
+      this.detectionCanvas.width = CONFIG.detection.width;
+      this.detectionCanvas.height = CONFIG.detection.height;
+      this.detectionCtx = this.detectionCanvas.getContext('2d');
+      
+      this.updateStatus('Model loaded. Click Detect Objects to start');
+    } catch (error) {
+      console.error('Error loading model:', error);
+      this.updateStatus('Error: ' + error.message);
+    }
+  }
+
+  updateStatus(message) {
+    const statusElement = document.getElementById('detection-status');
+    if (statusElement) {
+      statusElement.textContent = message;
+    }
+  }
+
+  async detect(source) {
+    if (!this.detector || !this.isDetecting || !this.detectionCanvas) return;
+    
+    try {
+      // Get source element and prepare for detection
+      let sourceElement;
+      if (source instanceof p5.Image) {
+        sourceElement = source.canvas || source.elt;
+      } else if (source instanceof p5.Video) {
+        sourceElement = source.elt;
+      } else {
+        sourceElement = source;
+      }
+      
+      // Clear detection canvas
+      this.detectionCtx.clearRect(0, 0, this.detectionCanvas.width, this.detectionCanvas.height);
+      
+      // Draw source to detection canvas
+      this.detectionCtx.save();
+      this.detectionCtx.scale(CONFIG.detection.scale, CONFIG.detection.scale);
+      this.detectionCtx.drawImage(sourceElement, 0, 0);
+      this.detectionCtx.restore();
+      
+      // Perform detection
+      console.log('Starting detection on:', sourceElement.tagName);
+      this.detectedObjects = await this.detector.detect(this.detectionCanvas);
+      
+      // Scale detection boxes to match display size
+      const scaleBack = 1 / CONFIG.detection.scale;
+      this.detectedObjects = this.detectedObjects.map(obj => ({
+        ...obj,
+        bbox: [
+          obj.bbox[0] * scaleBack,
+          obj.bbox[1] * scaleBack,
+          obj.bbox[2] * scaleBack,
+          obj.bbox[3] * scaleBack
+        ]
+      }));
+      
+      console.log('Detection results:', this.detectedObjects);
+      this.updateStatus(`Detected ${this.detectedObjects.length} objects`);
+    } catch (error) {
+      console.error('Detection error:', error);
+      this.updateStatus('Detection error: ' + error.message);
+    }
+  }
+
+  drawBoxes() {
+    push();
+    translate(-width/2, -height/2); // Adjust for centered canvas
+    
+    this.detectedObjects.forEach(detection => {
+      const [x, y, w, h] = detection.bbox;
+      const confidence = Math.round(detection.score * 100);
+      const label = `${detection.class} (${confidence}%)`;
+      
+      // Draw box with glow effect
+      drawingContext.shadowBlur = 10;
+      drawingContext.shadowColor = 'rgba(46, 204, 113, 0.5)';
+      stroke(46, 204, 113);
+      strokeWeight(2);
+      noFill();
+      rect(x, y, w, h);
+      
+      // Reset shadow for text
+      drawingContext.shadowBlur = 0;
+      
+      // Draw label background
+      const padding = 6;
+      const textHeight = 24;
+      textSize(14);
+      const labelWidth = textWidth(label) + padding * 2;
+      
+      // Background with alpha gradient
+      noStroke();
+      fill(46, 204, 113, 200);
+      rect(x, y - textHeight - 5, labelWidth, textHeight);
+      
+      // Draw label text
+      fill(255);
+      textAlign(LEFT, CENTER);
+      text(label, x + padding, y - textHeight/2 - 5);
+    });
+    
+    pop();
+  }
+
+  toggle() {
+    this.isDetecting = !this.isDetecting;
+    this.updateStatus(this.isDetecting ? 'Detection active' : 'Detection paused');
+  }
+}

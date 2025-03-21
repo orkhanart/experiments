@@ -1,0 +1,198 @@
+import { CONFIG } from './config.js';
+
+export class ArtRecognizer {
+  constructor() {
+    this.model = null;
+    this.processor = null;
+    this.isProcessing = false;
+    this.lastProcessTime = 0;
+    this.processThrottleMs = 1000; // Process every second
+    this.recognizedElements = [];
+    
+    // Art-specific categories to detect
+    this.artCategories = [
+      "portrait painting", "landscape painting", "abstract art",
+      "impressionist painting", "modern art", "classical painting",
+      "watercolor painting", "oil painting", "digital art",
+      "sculpture", "sketch", "graffiti art",
+      "pop art", "surrealist art", "minimalist art",
+      "renaissance art", "baroque art", "contemporary art",
+      "figurative art", "street art", "illustration",
+      // Objects commonly found in art
+      "human figure", "face", "hands", "eyes",
+      "nature", "buildings", "animals", "flowers",
+      "geometric shapes", "patterns", "symbols", "text",
+      // Art elements
+      "brush strokes", "color palette", "texture", "composition",
+      "light and shadow", "perspective", "symmetry", "movement"
+    ];
+  }
+
+  async init() {
+    try {
+      this.updateStatus('Loading CLIP model...', 'loading');
+      
+      // Load CLIP model
+      const modelUrl = 'https://tfhub.dev/openai/clip/2';
+      this.model = await tf.loadGraphModel(modelUrl);
+      
+      this.updateStatus('Art recognition ready', 'ready');
+      console.log('CLIP model loaded successfully');
+      
+      // Initialize the processor
+      await this.initProcessor();
+      
+    } catch (error) {
+      console.error('Error loading CLIP model:', error);
+      this.updateStatus('Error loading art recognition model', 'error');
+    }
+  }
+
+  async initProcessor() {
+    // Initialize text encodings for art categories
+    const textEncoder = new TextEncoder();
+    this.categoryEncodings = await Promise.all(
+      this.artCategories.map(async (category) => {
+        const encoded = textEncoder.encode(category);
+        return await this.model.executor.execute(
+          { text: encoded },
+          ['text_projection']
+        );
+      })
+    );
+  }
+
+  updateStatus(message, state = 'info') {
+    const statusElement = document.getElementById('art-recognition-status');
+    if (statusElement) {
+      statusElement.textContent = message;
+      statusElement.className = `status-text status-${state}`;
+    }
+  }
+
+  async recognize(imageElement) {
+    if (!this.model || this.isProcessing) return;
+    
+    const now = performance.now();
+    if (now - this.lastProcessTime < this.processThrottleMs) return;
+    
+    this.isProcessing = true;
+    this.lastProcessTime = now;
+    
+    try {
+      // Preprocess image
+      const tensor = tf.browser.fromPixels(imageElement)
+        .resizeBilinear([224, 224])
+        .expandDims(0)
+        .toFloat()
+        .div(255.0);
+
+      // Get image embeddings
+      const imageEmbedding = await this.model.executor.execute(
+        { image: tensor },
+        ['image_projection']
+      );
+
+      // Calculate similarities with art categories
+      const similarities = this.categoryEncodings.map((categoryEncoding, index) => {
+        const similarity = tf.matMul(
+          imageEmbedding,
+          categoryEncoding,
+          false,
+          true
+        );
+        return {
+          category: this.artCategories[index],
+          score: similarity.dataSync()[0]
+        };
+      });
+
+      // Sort by similarity score
+      this.recognizedElements = similarities
+        .sort((a, b) => b.score - a.score)
+        .filter(item => item.score > 0.2); // Filter low confidence predictions
+
+      this.updateStatus(
+        `Recognized ${this.recognizedElements.length} artistic elements`,
+        'active'
+      );
+      
+      // Cleanup
+      tensor.dispose();
+      imageEmbedding.dispose();
+      
+    } catch (error) {
+      console.error('Art recognition error:', error);
+      this.updateStatus('Recognition error: ' + error.message, 'error');
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  drawRecognitions(p5Instance) {
+    if (!this.recognizedElements.length) return;
+
+    p5Instance.push();
+    p5Instance.translate(-p5Instance.width/2, -p5Instance.height/2);
+    
+    // Draw recognition panel
+    const padding = 20;
+    const itemHeight = 25;
+    const panelWidth = 300;
+    const panelHeight = Math.min(
+      this.recognizedElements.length * itemHeight + padding * 2,
+      400
+    );
+    
+    // Panel background
+    p5Instance.fill(0, 0, 0, 200);
+    p5Instance.noStroke();
+    p5Instance.rect(
+      p5Instance.width - panelWidth - padding,
+      padding,
+      panelWidth,
+      panelHeight,
+      10
+    );
+    
+    // Title
+    p5Instance.fill(255);
+    p5Instance.textSize(16);
+    p5Instance.textAlign(p5Instance.LEFT, p5Instance.TOP);
+    p5Instance.text(
+      'Artistic Elements',
+      p5Instance.width - panelWidth - padding + 15,
+      padding + 15
+    );
+    
+    // List items
+    p5Instance.textSize(14);
+    this.recognizedElements.forEach((item, index) => {
+      if (index > 12) return; // Show top 12 results
+      
+      const y = padding + 45 + index * itemHeight;
+      const score = Math.round(item.score * 100);
+      
+      // Score bar
+      p5Instance.noStroke();
+      p5Instance.fill(46, 204, 113, 100);
+      p5Instance.rect(
+        p5Instance.width - panelWidth - padding + 15,
+        y,
+        (panelWidth - 30) * (score/100),
+        itemHeight - 5,
+        5
+      );
+      
+      // Text
+      p5Instance.fill(255);
+      p5Instance.text(
+        `${item.category} (${score}%)`,
+        p5Instance.width - panelWidth - padding + 20,
+        y + itemHeight/2
+      );
+    });
+    
+    p5Instance.pop();
+  }
+}

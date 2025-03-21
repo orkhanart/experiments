@@ -1,0 +1,13 @@
+{
+  "name": "p5-generative-art",
+  "version": "1.0.0",
+  "description": "Generative art project using p5.js",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx live-server"
+  },
+  "dependencies": {
+    "@shadcn/ui": "latest",
+    "p5": "^1.9.0"
+  }
+}

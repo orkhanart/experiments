@@ -1,0 +1,191 @@
+import { CONFIG } from './config.js';
+
+export class ArtRecognizer {
+  constructor() {
+    this.model = null;
+    this.isProcessing = false;
+    this.lastProcessTime = 0;
+    this.processThrottleMs = 1000;
+    this.recognizedElements = [];
+    
+    // Using MobileNet for art recognition
+    this.modelPath = 'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json';
+    
+    // Art-specific categories and their corresponding ImageNet classes
+    this.artCategories = {
+      'painting': ['painting', 'oil_painting', 'watercolor', 'canvas'],
+      'portrait': ['face', 'person', 'human'],
+      'landscape': ['landscape', 'mountain', 'valley', 'seashore', 'lake'],
+      'abstract': ['pattern', 'design', 'texture'],
+      'architecture': ['building', 'architecture', 'house', 'church'],
+      'nature': ['flower', 'tree', 'plant', 'animal'],
+      'urban': ['city', 'street', 'building'],
+      'objects': ['object', 'artifact', 'sculpture']
+    };
+  }
+
+  async init() {
+    try {
+      this.updateStatus('Loading art recognition model...', 'loading');
+      
+      // Load MobileNet model
+      this.model = await tf.loadLayersModel(this.modelPath);
+      
+      this.updateStatus('Art recognition ready', 'ready');
+      console.log('MobileNet model loaded successfully');
+      
+    } catch (error) {
+      console.error('Error loading art recognition model:', error);
+      this.updateStatus('Error loading model: ' + error.message, 'error');
+    }
+  }
+
+  updateStatus(message, state = 'info') {
+    const statusElement = document.getElementById('art-recognition-status');
+    if (statusElement) {
+      statusElement.textContent = message;
+      statusElement.className = `status-text status-${state}`;
+    }
+  }
+
+  async recognize(imageElement) {
+    if (!this.model || !this.isProcessing) return;
+    
+    const now = performance.now();
+    if (now - this.lastProcessTime < this.processThrottleMs) return;
+    
+    try {
+      // Preprocess image
+      const tensor = tf.browser.fromPixels(imageElement)
+        .resizeBilinear([224, 224])
+        .toFloat()
+        .expandDims()
+        .div(255.0);
+
+      // Get predictions
+      const predictions = await this.model.predict(tensor).data();
+      
+      // Process predictions into art categories
+      this.recognizedElements = this.processArtPredictions(predictions);
+      
+      this.updateStatus(
+        `Recognized ${this.recognizedElements.length} artistic elements`,
+        'active'
+      );
+      
+      // Cleanup
+      tensor.dispose();
+      
+    } catch (error) {
+      console.error('Art recognition error:', error);
+      this.updateStatus('Recognition error: ' + error.message, 'error');
+    }
+    
+    this.lastProcessTime = now;
+  }
+
+  processArtPredictions(predictions) {
+    const imagenetClasses = mobilenet.CLASS_NAMES;
+    const results = [];
+    
+    // Process each art category
+    for (const [category, relatedClasses] of Object.entries(this.artCategories)) {
+      let maxScore = 0;
+      
+      // Find highest score among related classes
+      relatedClasses.forEach(className => {
+        const classIndex = imagenetClasses.findIndex(c => 
+          c.toLowerCase().includes(className.toLowerCase())
+        );
+        if (classIndex !== -1) {
+          maxScore = Math.max(maxScore, predictions[classIndex]);
+        }
+      });
+      
+      if (maxScore > 0.1) { // 10% confidence threshold
+        results.push({
+          category,
+          score: maxScore
+        });
+      }
+    }
+    
+    // Sort by score
+    return results.sort((a, b) => b.score - a.score);
+  }
+
+  drawRecognitions(p5Instance) {
+    if (!this.recognizedElements.length) return;
+
+    p5Instance.push();
+    p5Instance.translate(-p5Instance.width/2, -p5Instance.height/2);
+    
+    // Draw recognition panel
+    const padding = 20;
+    const itemHeight = 25;
+    const panelWidth = 300;
+    const panelHeight = Math.min(
+      this.recognizedElements.length * itemHeight + padding * 2,
+      400
+    );
+    
+    // Panel background
+    p5Instance.fill(0, 0, 0, 200);
+    p5Instance.noStroke();
+    p5Instance.rect(
+      p5Instance.width - panelWidth - padding,
+      padding,
+      panelWidth,
+      panelHeight,
+      10
+    );
+    
+    // Title
+    p5Instance.fill(255);
+    p5Instance.textSize(16);
+    p5Instance.textAlign(p5Instance.LEFT, p5Instance.TOP);
+    p5Instance.text(
+      'Artistic Elements',
+      p5Instance.width - panelWidth - padding + 15,
+      padding + 15
+    );
+    
+    // List items
+    p5Instance.textSize(14);
+    this.recognizedElements.forEach((item, index) => {
+      if (index > 12) return; // Show top 12 results
+      
+      const y = padding + 45 + index * itemHeight;
+      const score = Math.round(item.score * 100);
+      
+      // Score bar
+      p5Instance.noStroke();
+      p5Instance.fill(155, 89, 182, 100);
+      p5Instance.rect(
+        p5Instance.width - panelWidth - padding + 15,
+        y,
+        (panelWidth - 30) * (score/100),
+        itemHeight - 5,
+        5
+      );
+      
+      // Text
+      p5Instance.fill(255);
+      p5Instance.text(
+        `${item.category} (${score}%)`,
+        p5Instance.width - panelWidth - padding + 20,
+        y + itemHeight/2
+      );
+    });
+    
+    p5Instance.pop();
+  }
+
+  toggle() {
+    this.isProcessing = !this.isProcessing;
+    this.updateStatus(
+      this.isProcessing ? 'Art recognition active' : 'Art recognition paused',
+      this.isProcessing ? 'active' : 'paused'
+    );
+  }
+}

@@ -1,0 +1,435 @@
+// Configuration
+const CONFIG = {
+  canvas: {
+    width: 1200,
+    height: 900,
+    maxWidth: 3000,
+    maxHeight: 2000,
+    padding: 10
+  },
+  points: {
+    count: 500,
+    minSize: 3,
+    maxSize: 8,
+    brightnessThreshold: 150
+  },
+  animation: {
+    noiseSpeed: 0.01,
+    maxDisplacement: 20,
+    mouseForce: 3,
+    mouseRadius: 100,
+    dampening: 0.95
+  },
+  shapes: {
+    circleSize: 8,
+    rectSize: 10,
+    opacity: 50
+  }
+};
+
+// State variables
+let img;
+let video;
+let points = [];
+let connectionDistance = 100;
+let useVideo = false;
+let isAnimating = false;
+let noiseOffset = 0;
+let mouseInteraction = false;
+let currentEffect = 'none'; // none, invert, threshold, posterize
+
+// Object detection variables
+let objectDetector = null;
+let detectedObjects = [];
+let isDetecting = false;
+let detectionCanvas;
+let detectionCtx;
+
+// Initialize the object detector
+async function initObjectDetector() {
+    updateDetectionStatus('Loading model...');
+    try {
+        if (typeof cocoSsd === 'undefined') {
+            throw new Error('COCO-SSD model not loaded');
+        }
+        console.log('Loading COCO-SSD model...');
+        objectDetector = await cocoSsd.load();
+        console.log('Model loaded successfully');
+        
+        // Create detection canvas
+        detectionCanvas = document.createElement('canvas');
+        detectionCanvas.width = 640;
+        detectionCanvas.height = 480;
+        detectionCtx = detectionCanvas.getContext('2d');
+        
+        updateDetectionStatus('Model loaded. Click Detect Objects to start');
+    } catch (error) {
+        console.error('Error loading model:', error);
+        updateDetectionStatus('Error: ' + error.message);
+    }
+}
+
+function updateDetectionStatus(message) {
+    const statusElement = document.getElementById('detection-status');
+    if (statusElement) {
+        statusElement.textContent = message;
+    }
+}
+
+function preload() {
+  img = loadImage('https://picsum.photos/800');
+}
+
+function setup() {
+  // Get container dimensions
+  const container = document.getElementById('canvas-container');
+  const containerWidth = container.clientWidth - CONFIG.canvas.padding * 2;
+  const containerHeight = container.clientHeight - CONFIG.canvas.padding * 2;
+  
+  // Calculate canvas size based on container and max dimensions
+  CONFIG.canvas.width = min(containerWidth, CONFIG.canvas.maxWidth);
+  CONFIG.canvas.height = min(containerHeight, CONFIG.canvas.maxHeight);
+  
+  const canvas = createCanvas(CONFIG.canvas.width, CONFIG.canvas.height);
+  canvas.parent('canvas-container');
+  imageMode(CENTER);
+  
+  video = createCapture(VIDEO);
+  video.size(width, height);
+  video.hide();
+  
+  generatePoints();
+  frameRate(30);
+  
+  // Handle window resize
+  window.addEventListener('resize', windowResized);
+  
+  // Initialize object detector
+  setTimeout(initObjectDetector, 1000); // Wait for TensorFlow to load
+}
+
+function windowResized() {
+  // Update canvas size based on container
+  const container = document.getElementById('canvas-container');
+  const containerWidth = container.clientWidth - CONFIG.canvas.padding * 2;
+  const containerHeight = container.clientHeight - CONFIG.canvas.padding * 2;
+  
+  CONFIG.canvas.width = min(containerWidth, CONFIG.canvas.maxWidth);
+  CONFIG.canvas.height = min(containerHeight, CONFIG.canvas.maxHeight);
+  
+  resizeCanvas(CONFIG.canvas.width, CONFIG.canvas.height);
+  generatePoints(); // Regenerate points for new canvas size
+}
+
+function generatePoints() {
+  points = [];
+  let source = useVideo ? video : img;
+  source.loadPixels();
+  
+  for(let i = 0; i < CONFIG.points.count; i++) {
+    let x = floor(random(source.width));
+    let y = floor(random(source.height));
+    let index = (x + y * source.width) * 4;
+    let brightness = (source.pixels[index] + source.pixels[index+1] + source.pixels[index+2]) / 3;
+    
+    if(brightness > CONFIG.points.brightnessThreshold) {
+      let mappedX = map(x, 0, source.width, 0, width);
+      let mappedY = map(y, 0, source.height, 0, height);
+      
+      points.push({
+        originalX: mappedX,
+        originalY: mappedY,
+        x: mappedX,
+        y: mappedY,
+        size: random(CONFIG.points.minSize, CONFIG.points.maxSize),
+        color: color(
+          source.pixels[index],
+          source.pixels[index+1],
+          source.pixels[index+2]
+        ),
+        noiseSeed: random(1000),
+        velocity: createVector(0, 0)
+      });
+    }
+  }
+}
+
+function updatePoints() {
+  noiseOffset += CONFIG.animation.noiseSpeed;
+  
+  points.forEach(p => {
+    // Mouse interaction
+    if(mouseInteraction && mouseIsPressed) {
+      let d = dist(mouseX, mouseY, p.x, p.y);
+      if(d < CONFIG.animation.mouseRadius) {
+        let force = p5.Vector.sub(createVector(p.x, p.y), createVector(mouseX, mouseY));
+        force.normalize();
+        force.mult(CONFIG.animation.mouseForce);
+        p.velocity.add(force);
+      }
+    }
+    
+    // Noise movement
+    let noiseX = map(noise(p.noiseSeed, noiseOffset), 0, 1, 
+                     -CONFIG.animation.maxDisplacement, CONFIG.animation.maxDisplacement);
+    let noiseY = map(noise(p.noiseSeed + 1000, noiseOffset), 0, 1, 
+                     -CONFIG.animation.maxDisplacement, CONFIG.animation.maxDisplacement);
+    
+    // Update position
+    p.x = p.originalX + noiseX + p.velocity.x;
+    p.y = p.originalY + noiseY + p.velocity.y;
+    
+    // Dampen velocity
+    p.velocity.mult(CONFIG.animation.dampening);
+  });
+}
+
+function drawConnections() {
+  for(let i = 0; i < points.length; i++) {
+    for(let j = i+1; j < points.length; j++) {
+      let d = dist(points[i].x, points[i].y, points[j].x, points[j].y);
+      
+      if(d < connectionDistance) {
+        // Line opacity based on distance
+        let alpha = map(d, 0, connectionDistance, 255, 50);
+        let lineColor = color(red(points[i].color), green(points[i].color), blue(points[i].color), alpha);
+        stroke(lineColor);
+        line(points[i].x, points[i].y, points[j].x, points[j].y);
+        
+        // Midpoint shape
+        let midX = (points[i].x + points[j].x) / 2;
+        let midY = (points[i].y + points[j].y) / 2;
+        
+        if(random() > 0.5) {
+          fill(points[j].color.levels[0], points[j].color.levels[1], 
+               points[j].color.levels[2], CONFIG.shapes.opacity);
+          ellipse(midX, midY, CONFIG.shapes.circleSize);
+        } else {
+          noFill();
+          rectMode(CENTER);
+          rect(midX, midY, CONFIG.shapes.rectSize, CONFIG.shapes.rectSize);
+        }
+      }
+    }
+  }
+}
+
+function applyImageEffect() {
+  switch(currentEffect) {
+    case 'invert':
+      filter(INVERT);
+      break;
+    case 'threshold':
+      filter(THRESHOLD);
+      break;
+    case 'posterize':
+      filter(POSTERIZE, 4);
+      break;
+  }
+}
+
+function draw() {
+  background(0);
+  
+  push();
+  translate(width/2, height/2);
+  
+  // Draw media
+  if(useVideo && video.loadedmetadata) {
+    image(video, 0, 0, width, height);
+    if(isDetecting && frameCount % 15 === 0) { // Detect more frequently
+      detectObjects(video);
+    }
+  } else if (img) {
+    image(img, 0, 0, width, height);
+    if(isDetecting) { // Always try to detect for images
+      detectObjects(img);
+    }
+  }
+  
+  // Draw detection boxes first
+  if(detectedObjects.length > 0) {
+    drawDetectionBoxes();
+  }
+  
+  applyImageEffect();
+  
+  if(isAnimating) {
+    updatePoints();
+  }
+  
+  drawConnections();
+  
+  // Draw points
+  noStroke();
+  points.forEach(p => {
+    fill(p.color);
+    ellipse(p.x - width/2, p.y - height/2, p.size);
+  });
+  
+  pop();
+}
+
+async function detectObjects(source) {
+  if (!objectDetector || !isDetecting || !detectionCanvas) return;
+  
+  try {
+    // Get source element and prepare for detection
+    let sourceElement;
+    if (source instanceof p5.Image) {
+      sourceElement = source.canvas || source.elt;
+    } else if (source instanceof p5.Video) {
+      sourceElement = source.elt;
+    } else {
+      sourceElement = source;
+    }
+    
+    // Clear detection canvas
+    detectionCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+    
+    // Draw source to detection canvas
+    detectionCtx.save();
+    detectionCtx.scale(0.5, 0.5); // Scale down for better detection
+    detectionCtx.drawImage(sourceElement, 0, 0);
+    detectionCtx.restore();
+    
+    // Perform detection
+    console.log('Starting detection on:', sourceElement.tagName);
+    detectedObjects = await objectDetector.detect(detectionCanvas);
+    
+    // Scale detection boxes to match display size
+    detectedObjects = detectedObjects.map(obj => ({
+      ...obj,
+      bbox: [
+        obj.bbox[0] * 2,  // Scale back up
+        obj.bbox[1] * 2,
+        obj.bbox[2] * 2,
+        obj.bbox[3] * 2
+      ]
+    }));
+    
+    console.log('Detection results:', detectedObjects);
+    updateDetectionStatus(`Detected ${detectedObjects.length} objects`);
+  } catch (error) {
+    console.error('Detection error:', error);
+    updateDetectionStatus('Detection error: ' + error.message);
+  }
+}
+
+function drawDetectionBoxes() {
+  push();
+  translate(-width/2, -height/2); // Adjust for centered canvas
+  
+  detectedObjects.forEach(detection => {
+    const [x, y, w, h] = detection.bbox;
+    const confidence = Math.round(detection.score * 100);
+    const label = `${detection.class} (${confidence}%)`;
+    
+    // Draw box with glow effect
+    drawingContext.shadowBlur = 10;
+    drawingContext.shadowColor = 'rgba(46, 204, 113, 0.5)';
+    stroke(46, 204, 113);
+    strokeWeight(2);
+    noFill();
+    rect(x, y, w, h);
+    
+    // Reset shadow for text
+    drawingContext.shadowBlur = 0;
+    
+    // Draw label background
+    const padding = 6;
+    const textHeight = 24;
+    textSize(14);
+    const labelWidth = textWidth(label) + padding * 2;
+    
+    // Background with alpha gradient
+    noStroke();
+    fill(46, 204, 113, 200);
+    rect(x, y - textHeight - 5, labelWidth, textHeight);
+    
+    // Draw label text
+    fill(255);
+    textAlign(LEFT, CENTER);
+    text(label, x + padding, y - textHeight/2 - 5);
+  });
+  
+  pop();
+}
+
+function toggleObjectDetection() {
+  isDetecting = !isDetecting;
+  if(isDetecting) {
+    updateDetectionStatus('Starting detection...');
+  } else {
+    detectedObjects = [];
+    updateDetectionStatus('Detection stopped');
+  }
+}
+
+// UI Control Functions
+function toggleAnimation() {
+  isAnimating = !isAnimating;
+}
+
+function toggleMouseInteraction() {
+  mouseInteraction = !mouseInteraction;
+}
+
+function setEffect(effect) {
+  currentEffect = effect;
+}
+
+function toggleInputSource() {
+  useVideo = !useVideo;
+  if(useVideo) {
+    video.loop();
+  } else {
+    video.pause();
+  }
+  generatePoints();
+}
+
+function dropHandler(event) {
+  event.preventDefault();
+  let file = event.dataTransfer.files[0];
+  if(file.type.match('image.*')) {
+    // Reset detection when new image is loaded
+    detectedObjects = [];
+    isDetecting = false;
+    
+    // Create a temporary HTML image element
+    const imgUrl = URL.createObjectURL(file);
+    const tempImg = new Image();
+    
+    tempImg.onload = () => {
+      // Load into p5.js image
+      img = loadImage(imgUrl, () => {
+        // Adjust canvas size based on image aspect ratio
+        const container = document.getElementById('canvas-container');
+        const containerWidth = container.clientWidth - CONFIG.canvas.padding * 2;
+        const containerHeight = container.clientHeight - CONFIG.canvas.padding * 2;
+        
+        let imgAspect = img.width / img.height;
+        let containerAspect = containerWidth / containerHeight;
+        
+        if (imgAspect > containerAspect) {
+          CONFIG.canvas.width = min(containerWidth, CONFIG.canvas.maxWidth);
+          CONFIG.canvas.height = CONFIG.canvas.width / imgAspect;
+        } else {
+          CONFIG.canvas.height = min(containerHeight, CONFIG.canvas.maxHeight);
+          CONFIG.canvas.width = CONFIG.canvas.height * imgAspect;
+        }
+        
+        resizeCanvas(CONFIG.canvas.width, CONFIG.canvas.height);
+        generatePoints();
+        
+        // Start detection if it was active
+        if (objectDetector) {
+          updateDetectionStatus('Ready for detection');
+        }
+      });
+    };
+    
+    tempImg.src = imgUrl;
+  }
+}

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generative Art</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3"></script>
+    <link href="styles.css" rel="stylesheet">
+    <script type="module" src="sketch.js"></script>
+    <script>
+        window.addEventListener('load', function() {
+            if (typeof tf === 'undefined') {
+                console.error('TensorFlow.js not loaded');
+                document.getElementById('detection-status').textContent = 'Error: TensorFlow.js not loaded';
+            } else {
+                console.log('TensorFlow.js loaded successfully');
+            }
+        });
+    </script>
+</head>
+<body ondragover="event.preventDefault()" ondrop="dropHandler(event)">
+    <div class="app-layout">
+        <!-- Left Sidebar Controls -->
+        <div class="sidebar">
+            <h1 class="title">Generative Art</h1>
+            
+            <div class="instructions">
+                Drag & drop image or use camera
+            </div>
+            
+            <div class="controls-section">
+                <h2>Controls</h2>
+                <div class="control-group">
+                    <button class="control-btn" onclick="toggleAnimation()">
+                        <span class="icon">▶</span>
+                        Animation
+                    </button>
+                    <button class="control-btn" onclick="toggleInputSource()">
+                        <span class="icon">📷</span>
+                        Camera
+                    </button>
+                    <button class="control-btn" onclick="toggleMouseInteraction()">
+                        <span class="icon">🖱️</span>
+                        Mouse Interaction
+                    </button>
+                </div>
+            </div>
+            
+            <div class="controls-section">
+                <h2>Object Detection</h2>
+                <div class="control-group">
+                    <button class="control-btn" onclick="toggleObjectDetection()">
+                        <span class="icon">🔍</span>
+                        Detect Objects
+                    </button>
+                    <div id="detection-status" class="status-text">Loading model...</div>
+                </div>
+            </div>
+
+            <div class="controls-section">
+                <h2>Effects</h2>
+                <div class="control-group effects-grid">
+                    <button class="effect-btn" onclick="setEffect('none')">None</button>
+                    <button class="effect-btn" onclick="setEffect('invert')">Invert</button>
+                    <button class="effect-btn" onclick="setEffect('threshold')">Threshold</button>
+                    <button class="effect-btn" onclick="setEffect('posterize')">Posterize</button>
+                </div>
+            </div>
+
+            <div class="controls-section">
+                <h2>Object Detection</h2>
+                <div class="control-group">
+                    <button class="control-btn" onclick="toggleObjectDetection()">
+                        <span class="icon">🔍</span>
+                        Detect Objects
+                    </button>
+                    <div class="detection-status" id="detection-status"></div>
+                </div>
+            </div>
+            
+            <div class="controls-section">
+                <h2>Connection Distance</h2>
+                <div class="slider-group">
+                    <input type="range" 
+                           id="distance" 
+                           min="50" 
+                           max="300" 
+                           value="100" 
+                           oninput="connectionDistance = this.value; document.getElementById('distanceValue').textContent = this.value">
+                    <span id="distanceValue">100</span>px
+                </div>
+            </div>
+            
+            <div class="info-section">
+                <p>💡 Click and drag to interact with points</p>
+                <p>🎨 Drop image anywhere to load</p>
+            </div>
+        </div>
+        
+        <!-- Right Side Canvas -->
+        <div class="main-content">
+            <div id="canvas-container" class="canvas-container"></div>
+        </div>
+    </div>
+    <script src="sketch.js"></script>
+</body>
+</html>

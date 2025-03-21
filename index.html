@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generative Art</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@1.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <link href="styles.css" rel="stylesheet">
+    <script type="module" src="sketch.js"></script>
+    <script>
+        window.addEventListener('load', function() {
+            if (typeof tf === 'undefined') {
+                console.error('TensorFlow.js not loaded');
+                document.getElementById('detection-status').textContent = 'Error: TensorFlow.js not loaded';
+            } else {
+                console.log('TensorFlow.js loaded successfully');
+            }
+        });
+    </script>
+</head>
+<body ondragover="event.preventDefault()" ondrop="dropHandler(event)">
+    <div class="app-layout">
+        <!-- Left Sidebar Controls -->
+        <div class="sidebar">
+            <h1 class="title">Generative Art</h1>
+            
+            <!-- Input Section -->
+            <div class="controls-section">
+                <h2>Input Source</h2>
+                <div class="instructions">
+                    Drop image here or use camera
+                </div>
+                <div class="control-group">
+                    <button class="control-btn primary" onclick="toggleInputSource()">
+                        <span class="icon">📷</span>
+                        Toggle Camera
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Animation Controls -->
+            <div class="controls-section">
+                <h2>Animation</h2>
+                <div class="control-group">
+                    <button class="control-btn" onclick="toggleAnimation()">
+                        <span class="icon">▶</span>
+                        Toggle Motion
+                    </button>
+                    <button class="control-btn" onclick="toggleMouseInteraction()">
+                        <span class="icon">🖱️</span>
+                        Mouse Force
+                    </button>
+                </div>
+                <div class="slider-group">
+                    <label for="distance">Connection Range:</label>
+                    <input type="range" 
+                           id="distance" 
+                           min="50" 
+                           max="300" 
+                           value="100" 
+                           oninput="connectionDistance = this.value; document.getElementById('distanceValue').textContent = this.value">
+                    <span id="distanceValue">100</span>px
+                </div>
+            </div>
+            
+            <!-- AI Features -->
+            <div class="controls-section">
+                <h2>AI Features</h2>
+                <div class="control-group">
+                    <button class="control-btn ai-btn" onclick="toggleObjectDetection()">
+                        <span class="icon">🔍</span>
+                        Detect Objects
+                    </button>
+                    <div id="detection-status" class="status-text">Initializing object detection...</div>
+                    
+                    <button class="control-btn art-btn" onclick="toggleArtRecognition()">
+                        <span class="icon">🎨</span>
+                        Analyze Artwork
+                    </button>
+                    <div id="art-recognition-status" class="status-text">Initializing art analysis...</div>
+                </div>
+            </div>
+
+            <!-- Visual Effects -->
+            <div class="controls-section">
+                <h2>Visual Effects</h2>
+                <div class="effects-grid">
+                    <button class="effect-btn active" onclick="setEffect('none')">
+                        <span class="effect-icon">🎨</span>
+                        Original
+                    </button>
+                    <button class="effect-btn" onclick="setEffect('invert')">
+                        <span class="effect-icon">🔄</span>
+                        Invert
+                    </button>
+                    <button class="effect-btn" onclick="setEffect('threshold')">
+                        <span class="effect-icon">◾</span>
+                        Threshold
+                    </button>
+                    <button class="effect-btn" onclick="setEffect('posterize')">
+                        <span class="effect-icon">🎯</span>
+                        Posterize
+                    </button>
+                </div>
+            </div>
+
+            <!-- Info Section -->
+            <div class="controls-section info-section">
+                <div class="info-text">
+                    <p>💡 Click and drag to interact with points</p>
+                    <p>🎨 Drop any image to generate art</p>
+                    <p>📷 Camera requires permissions</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Canvas Area -->
+        <div class="main-content">
+            <div id="canvas-container"></div>
+        </div>
+    </div>
+</body>
+</html>
