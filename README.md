@@ -1,30 +1,91 @@
-# P5.js Generative Art Project
+# Interactive Art Generator
 
-A generative art project using P5.js with a modern UI built using shadcn components.
+An interactive web-based art generator that combines real-time image processing, object detection, and art recognition using p5.js and modern web technologies.
 
-## Setup
+## Features
 
-1. Install dependencies:
+- Real-time image processing and effects
+- Object detection using computer vision
+- Art recognition capabilities
+- Interactive point-based animations
+- Multiple input sources (camera, image upload)
+- Configurable visual effects
+- Toggleable animation and mouse interaction
+
+## Tech Stack
+
+- **Frontend**: p5.js, HTML5 Canvas
+- **UI Components**: shadcn/ui
+- **Core Libraries**: TensorFlow.js (for object detection and art recognition)
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js (latest LTS version recommended)
+- npm (comes with Node.js)
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/orkhanart/experiments.git
+cd experiments
+```
+
+2. Install dependencies:
 ```bash
 npm install
 ```
 
-2. Start the development server:
+### Running the Project
+
+Start the development server:
 ```bash
 npm start
 ```
 
-## Features
+The application will be available at `http://localhost:8080`
 
-- 800x800 canvas centered on the page
-- Dark theme with white border
-- Refresh button to generate new artwork
-- Modern UI components using shadcn
+## Project Structure
 
-## Structure
+- `/js/` - Main JavaScript source files
+  - `app.js` - Main application class
+  - `objectDetection.js` - Object detection functionality
+  - `artRecognition.js` - Art recognition implementation
+  - `points.js` - Point-based animation management
+  - `imageEffects.js` - Visual effects implementation
+  - `config.js` - Application configuration
 
-- `index.html` - Main page structure
+- `/node_modules/` - Project dependencies
+- `index.html` - Main entry point
+- `sketch.js` - p5.js sketch initialization
 - `styles.css` - Custom styling
-- `sketch.js` - P5.js artwork logic
+- `package.json` - Project configuration and dependencies
 
-# experiments
+## Usage
+
+1. **Image Upload**: Drag and drop images or use the file picker
+2. **Camera Input**: Toggle camera input for real-time processing
+3. **Effects**: Apply various visual effects to your input
+4. **Object Detection**: Toggle object detection to highlight recognized objects
+5. **Art Recognition**: Enable art recognition to analyze your input
+6. **Animation**: Toggle animations and mouse interactions
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details
+
+## Acknowledgments
+
+- p5.js for the creative coding framework
+- TensorFlow.js for machine learning capabilities
+- shadcn/ui for modern UI components
