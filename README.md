@@ -26,3 +26,5 @@ npm start
 - `index.html` - Main page structure
 - `styles.css` - Custom styling
 - `sketch.js` - P5.js artwork logic
+
+# experiments
